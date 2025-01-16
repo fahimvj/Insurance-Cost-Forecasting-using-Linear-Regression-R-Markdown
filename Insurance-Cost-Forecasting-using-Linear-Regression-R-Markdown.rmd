@@ -1,0 +1,425 @@
+---
+title: "Mid-Term Project | Group -5"
+
+author: 
+  
+- name: Group Members-
+- name: Subrata Das (243000661)
+- name: Wasim Kabir (243002561)
+- name: Mafia Rahman Tule (243001461)
+- name: Mohammad Helal Uddin (243002461)
+- name: Fahim Shahriar Chowdhury (243000561)
+
+date: "Last compiled on: `r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document: 
+    toc: true
+    toc_float: true
+    collapsed: true
+    smooth_scroll: true
+    toc_depth: 4
+    theme: lumen
+    code_folding: show
+    number_sections: true
+---
+
+# BACK GROUND
+
+
+A health insurance company's financial success relies on generating more revenue than it incurs cost on the healthcare of its policyholders. However, forecasting medical expenses is challenging due to the unpredictability of costs associated with rare conditions. This project aims to precisely predict insurance costs by analyzing individuals' data, such as age, Body Mass Index, smoking habits, and other factors. Furthermore, we will identify the key variable that has the most significant impact on insurance costs. These predictions can be utilized to develop actuarial tables, enabling the adjustment of yearly premiums based on anticipated treatment expenses. This essentially constitutes a regression problem.
+
+
+# DATASET
+
+In this project, the dataset is already separated randomly into train and test dataset. 
+
+The features in the dataset are:
+
+1. **age**: age of primary beneficiary.
+2. **sex**: insurance contractor gender, female, male.
+3. **bmi**: Body Mass Index, providing an understanding of body, weights that are relatively high or low relative to height, objective index of body weight (kg/m2) using the ratio of height to weight, ideally 18.5 to 24.9.
+4. **children**: number of children covered by health insurance / number of dependents.
+5. **smoker**: smoking or not.
+6. **region**: the beneficiary’s residential area in the US, northeast, southeast, southwest, northwest.
+7. **charges**: individual medical costs billed by health insurance. 
+
+Since we are predicting insurance costs, charges will be our target feature.
+
+```{r load_libraries}
+# Load required libraries
+library(ggplot2)
+library(Metrics)
+library(car)
+library(corrplot)
+library(dplyr)
+library(tidyr)
+```
+
+```{r load_data}
+# Load training and testing datasets
+train_data <- read.csv("train.csv")
+test_data <- read.csv("test.csv")
+
+# Display basic information about the datasets
+cat("Training Dataset Dimensions:", dim(train_data)[1], "rows,", dim(train_data)[2], "columns\n")
+cat("Testing Dataset Dimensions:", dim(test_data)[1], "rows,", dim(test_data)[2], "columns\n")
+```
+
+# EXPECTED TASK
+
+## Data Preparation [Training Dataset] [Marks: 05]
+
+First, we are examining and preparing our training data:
+
+### Check if each feature is already in correct data type. If not set the correct data type.
+
+```{r feature_checking}
+glimpse(train_data)
+```
+
+we can see above that each feature is already in its correct type
+
+### Check if there are any duplicated observations on train dataset. If there’s then drop the row.
+
+```{r duplicate_checking}
+
+train_data[duplicated(train_data), ]
+```
+
+** There is one duplication **
+
+```{r duplicate_removing}
+
+#We are dropping the duplicate row.
+train_data <- train_data %>% distinct()
+```
+
+** We have dropped the duplicate row.**
+
+### Inspect for missing value. If there’s any missing value, please perform appropriate treatment.
+
+```{r data_preparation}
+
+# Checking for missing values
+missing_values <- colSums(is.na(train_data))
+print(missing_values)
+
+# Converting categorical variables to factors
+train_data$sex <- as.factor(train_data$sex)
+train_data$smoker <- as.factor(train_data$smoker)
+train_data$region <- as.factor(train_data$region)
+
+# Displaying structure of the prepared data
+str(train_data)
+
+```
+No missing values found
+
+## Exploratory Data Analysis (EDA) [Training Dataset] [Marks: 08]
+
+### Show the descriptive statistics of training dataset. Explain the numeric & categorical features.
+```{r eda_summary}
+
+# Summary statistics
+# Basic statistics of charges
+charges_stats <- summary(train_data$charges)
+print("Summary Statistics:")
+print(summary(train_data))
+
+print("Charges Statistics:")
+print(charges_stats)
+
+```
+
+### Show the distribution of ‘Charges’ through appropriate plot. Explain the plot.
+```{r distribution_of_charges}
+
+# Plot distribution of charges
+ggplot(train_data, aes(x = charges)) +
+  geom_histogram(fill = "skyblue", bins = 30, color = "black") +
+  stat_bin(geom = "text", bins = 30, aes(label = ..count..), 
+           vjust = -0.5, color = "black") +
+  theme_minimal() +
+  labs(title = "Distribution of Insurance Charges",
+       x = "Charges ($)",
+       y = "Frequency")
+
+```
+The distribution of charges shows a right-skewed pattern, with most charges concentrated in the lower range but with significant high-cost outliers.
+
+### Create below boxplots. And explain if there’s any pattern.
+
+#### Boxplot of Medical Charges as per sex.
+```{r boxplot_medical_charges_sex}
+
+# Sex vs Charges
+ggplot(train_data, aes(x = sex, y = charges, fill = sex)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Insurance Charges by Sex",
+       x = "Sex",
+       y = "Charges ($)")
+
+```
+
+Gender differences are relatively minor
+
+#### Boxplot of Medical Charges as per region.
+```{r boxplot_medical_charges_region}
+
+# Region vs Charges
+ggplot(train_data, aes(x = region, y = charges, fill = region)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Insurance Charges by Region",
+       x = "Region",
+       y = "Charges ($)")
+
+```
+Regional variations exist but are less pronounced
+
+#### Boxplot of Medical Charges as per children.
+```{r boxplot_medical_charges_children}
+# Create boxplot of medical charges by number of children
+ggplot(train_data, aes(x = factor(children), y = charges, fill = factor(children))) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Medical Charges Distribution by Number of Children",
+       x = "Number of Children",
+       y = "Medical Charges ($)",
+       fill = "Number of Children") +
+  scale_fill_brewer(palette = "Blues") +
+  theme(legend.position = "none")
+
+```
+
+Shows a clear bimodal distribution, with smokers having substantially higher charges. More children tend to correlate with higher charges
+
+#### Boxplot of Medical Charges as per smoker.
+```{r boxplot_medical_charges_smoker}
+
+# Smoker vs Charges
+ggplot(train_data, aes(x = smoker, y = charges, fill = smoker)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Insurance Charges by Smoking Status",
+       x = "Smoker",
+       y = "Charges ($)")
+
+```
+
+**Smokers have significantly higher charges**
+
+### Create a distribution of ‘charges’ categorizing it into smoker & non-smoker. Use two separate colors for each category.
+```{r distribution_of_charges_smoker_non_smoker}
+# Create distribution plot of charges by smoking status
+ggplot(train_data, aes(x = charges, fill = smoker)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("no" = "skyblue", "yes" = "coral")) +
+  theme_minimal() +
+  labs(title = "Distribution of Medical Charges by Smoking Status",
+       x = "Charges ($)",
+       y = "Density",
+       fill = "Smoker") +
+  theme(legend.position = "right")
+
+# Calculate summary statistics
+smoker_summary <- train_data %>%
+  group_by(smoker) %>%
+  summarise(
+    mean_charges = mean(charges),
+    median_charges = median(charges),
+    sd_charges = sd(charges),
+    count = n()
+  )
+
+
+```
+**Key observations from the analysis:**
+
+Non-smokers (n=851):
+
+Mean charges: $8,479
+Median charges: $7,348
+Shows a right-skewed distribution with most charges concentrated below $15,000
+Smokers (n=219):
+
+Mean charges: $31,550
+Median charges: $34,303
+Shows a more spread-out distribution with charges mostly between $20,000 and $45,000
+Notable findings:
+
+There's a clear separation between smoker and non-smoker distributions
+Smokers' medical charges are substantially higher (about 3.7 times) than non-smokers
+The variation in charges is also higher for smokers (SD: $11,554) compared to non-smokers (SD: $6,097)
+The distributions show minimal overlap, indicating smoking status is a strong predictor of medical charges
+
+
+
+
+
+### Create a correlation heatmap among features. Explain the plot.
+```{r correlation_heatmap}
+
+# Correlation matrix for numeric variables
+numeric_vars <- train_data[c("age", "bmi", "children", "charges")]
+correlation_matrix <- cor(numeric_vars)
+corrplot(correlation_matrix, method = "color", 
+         type = "upper", 
+         addCoef.col = "black",
+         tl.col = "black",
+         tl.srt = 45,
+         title = "\nCorrelation Matrix")
+
+```
+
+The correlation heatmap shows the strongest correlation is between charges and age, while other numeric variables show weaker correlations.
+
+## Linear Regression Analysis [Marks 12]
+
+### Step 01: Exploring the Models. [Marks: 02]
+
+```{r model_exploration}
+# Initial model with all predictors
+full_model <- lm(charges ~ ., data = train_data)
+
+# Perform backward elimination
+best_model <- step(full_model, direction = "backward")
+
+# Display summary of the best model
+summary(best_model)
+```
+
+The backward elimination process selected a model with four predictors: age, bmi, children, and smoker. The region and sex variables were eliminated as they didn't significantly improve the model.
+
+### Step 02: Prediction. [Marks: 02]
+
+```{r prediction}
+# Generate predictions on training data
+train_predictions <- predict(best_model, train_data)
+# Generate predictions on test data
+test_predictions <- predict(best_model, test_data)
+
+# Display sample of predictions vs actual values
+head(data.frame(
+  Actual = train_data$charges,
+  Predicted = train_predictions,
+  Difference = train_data$charges - train_predictions
+))
+```
+
+### Step 03: Evaluating Model Performance. [Marks: 03]
+
+```{r model_performance}
+# Calculate performance metrics for training data
+train_mae <- mae(train_data$charges, train_predictions)
+train_rmse <- rmse(train_data$charges, train_predictions)
+
+# Calculate performance metrics for test data
+test_mae <- mae(test_data$charges, test_predictions)
+test_rmse <- rmse(test_data$charges, test_predictions)
+
+# Create performance metrics table
+metrics_df <- data.frame(
+  Metric = c("Mean Absolute Error (MAE)", "Root Mean Square Error (RMSE)"),
+  Training = c(train_mae, train_rmse),
+  Testing = c(test_mae, test_rmse)
+)
+print("Model Performance Metrics:")
+print(metrics_df)
+```
+
+Model Performance (Step 03): [1] "Model Performance Metrics:"
+[1] "Mean Absolute Error (MAE): 4238.89"
+[2] "Root Mean Square Error (RMSE): 6150.52"
+
+
+### Step 04: Model Evaluation. [Marks: 02]
+
+```{r model_evaluation}
+# Calculate R-squared and Adjusted R-squared
+rsq <- summary(best_model)$r.squared
+adj_rsq <- summary(best_model)$adj.r.squared
+
+# Display key model statistics
+model_stats <- data.frame(
+  Statistic = c("R-squared", "Adjusted R-squared"),
+  Value = c(rsq, adj_rsq)
+)
+print("Model Statistics:")
+print(model_stats)
+
+# Display coefficients and their significance
+coef_summary <- summary(best_model)$coefficients
+print("
+Model Coefficients:")
+print(coef_summary)
+```
+
+### Step 05: Checking Model Assumptions. [Marks: 03]
+
+#### Linearity Test
+```{r linearity_test}
+# Partial regression plots
+avPlots(best_model, col = c("black", "blue"), col.lines = "red")
+```
+
+#### Residual Normality
+```{r residual_normality}
+# QQ plot
+qqnorm(residuals(best_model),col = c("black", "blue"), col.lines = "red")
+qqline(residuals(best_model))
+
+# Histogram of residuals
+ggplot(data.frame(residuals = residuals(best_model)), aes(x = residuals)) +
+  geom_histogram(fill = "skyblue", bins = 30, color = "black") +
+  theme_minimal() +
+  labs(title = "Distribution of Residuals",
+       x = "Residuals",
+       y = "Frequency")
+```
+
+#### Homoscedasticity
+```{r homoscedasticity}
+# Residuals vs Fitted plot
+plot(best_model, which = 1, col = c("black", "blue"), col.lines = "red")
+```
+
+#### Multicollinearity
+```{r multicollinearity}
+# Calculate VIF values
+vif_values <- vif(best_model)
+vif_df <- data.frame(
+  Variable = names(vif_values),
+  VIF = vif_values
+)
+print("Variance Inflation Factors:")
+print(vif_df)
+```
+
+# Conclusions
+
+1. **Model Selection**: 
+   - The final model includes age, bmi, children, and smoker as predictors
+   - Region and sex variables were eliminated during model selection
+
+2. **Model Performance**:
+   - The model explains approximately 74% of the variance in insurance charges
+   - Performance is consistent between training and testing datasets
+
+3. **Key Findings**:
+   - Smoking status is the strongest predictor of insurance charges
+   - Age and BMI also have significant positive relationships with charges
+   - The number of children has a smaller but still significant effect
+
+4. **Model Assumptions**:
+   - Linearity: Generally satisfied for all predictors
+   - Normality: Residuals show slight right skewness but acceptable
+   - Homoscedasticity: Some heteroscedasticity present at higher fitted values
+   - Multicollinearity: No significant issues (all VIF < 10)
+
+5. **Recommendations**:
+   - The model is suitable for predicting insurance charges
+   - Special attention should be paid to smoking status and age when assessing risk
+   - Consider non-linear transformations for future model improvements
+
